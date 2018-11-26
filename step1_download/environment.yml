@@ -1,0 +1,7 @@
+dependencies:
+- python=3.6.5
+- numpy
+- pandas
+- beautifulsoup4
+- sqlite3
+
