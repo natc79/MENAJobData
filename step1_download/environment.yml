@@ -3,5 +3,8 @@ dependencies:
 - numpy
 - pandas
 - beautifulsoup4
-- sqlite3
-
+- sqlite
+- pip
+- pip:
+    - googletrans
+    - html2text

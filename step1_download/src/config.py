@@ -1,6 +1,7 @@
 
 class FileConfig(object):
-    datapath = "C:/Work/Egypt"
+    #datapath = "/home/ec2-user/WorldBank/MENAJobData"
+    datapath = "C:/Work/WorldBank/MENAJobData"
     RAWDIR = datapath + '/data/raw'
     EXTDIR = datapath + '/data/external'
     INTDIR = datapath + '/data/intermin'

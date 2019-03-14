@@ -1,0 +1,11 @@
+
+*.pyc
+*.html
+*.csv
+*.zip
+*.pickle
+*.jpg
+*.png
+*.pdf
+*.xlsx
+*.download

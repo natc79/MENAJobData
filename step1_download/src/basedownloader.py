@@ -48,22 +48,35 @@ class BaseDownloader(object):
         req = urllib.request.Request(url)
         count = 1
         while count <= 5:
+            time.sleep(random.randint(3,6))
             try: 
                 response = urllib.request.urlopen(req)
                 if response.getcode() == 200:
                     return(response)
             except Exception:
                 print("Error for URL %s : %s" % (url, datetime.datetime.now()))
-            time.sleep(random.randint(1,5))
             count+=1
         return(None)
         
-    def _last_download_date(self, table):
+    def _export_csv_data(self):
+        """Export all data in sql into csv files."""
+        
+        query = """SELECT name FROM sqlite_master WHERE type='table';"""
+        tablenames = self.cursor.execute(query).fetchall()
+        for name in tablenames:
+            query = """SELECT * FROM %s""" % (name)
+            chunk_iter = pd.read_sql(query, chunksize=10000)
+            for i, chunk in enumerate(chunk_iter):
+                mode = 'w' if i == 0 else 'a'
+                header = True if i == 0 else False
+                chunk.to_csv(os.path.join(self.intdir, '%s.csv' % (name)), mode=mode, header=header, index=False)
+
+    def _last_download_date(self, table, datecol):
         """Query the latest data that will inform the scraping tool.  If data
         exists insert from 29 days ago, otherwise only insert data posted after last date downloaded.
         """
         
-        query = """SELECT MAX(postdate) FROM %s""" % (table)
+        query = """SELECT MAX(%s) FROM %s WHERE country = '%s';""" % (datecol, table, self.country)
         lastdate = self.cursor.execute(query).fetchall()[0][0]
         print("Last Date Downloaded: {}".format(lastdate))
         if lastdate is None:
@@ -73,7 +86,6 @@ class BaseDownloader(object):
             temp = lastdate.split('-')
             lastdate = datetime.date(int(temp[0]),int(temp[1]),int(temp[2]))
         return(lastdate)
-        urldata = get_WuzuffJobUrls(datetime.date(int(temp[0]),int(temp[1]),int(temp[2])))
         
     def _archive_database(self, table, urltable, maxdays=90):
         """Create an archive database where information is selected from main database and placed into 

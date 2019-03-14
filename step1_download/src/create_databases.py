@@ -169,8 +169,29 @@ def get_wuzzuf_table_schema():
 		'''
     return(tables)   
      
+     
 def get_tanqeeb_table_schema():
     tables = {}
+    
+    tables['mainurls'] = """CREATE TABLE IF NOT EXISTS mainurls (
+        downloaddate DATE,
+        country VARCHAR(15),
+        topic VARCHAR(15),
+        cat VARCHAR(25),
+        href VARCHAR(30),
+        img VARCHAR(100),
+        PRIMARY KEY(country, href));
+        """
+    
+    tables['categoryurls'] = """CREATE TABLE IF NOT EXISTS categoryurls (
+        downloaddate DATE,
+        country VARCHAR(15),
+        cat VARCHAR(25),
+        subcat VARCHAR(20),
+        href VARCHAR(100),
+        PRIMARY KEY(country, href));
+        """
+        
     tables['jobadpageurls'] = """CREATE TABLE IF NOT EXISTS jobadpageurls (
         country VARCHAR(15),
         cat VARCHAR(15),
@@ -197,8 +218,40 @@ def get_tanqeeb_table_schema():
         title VARCHAR(25),
         pubimg VARCHAR(50),
         description VARCHAR(5000),
-        PRIMARY KEY (uniqueid, postdate));
-    """     
+        PRIMARY KEY (country, uniqueid, postdate));
+    """ 
+
+    tables['translation'] = """CREATE TABLE IF NOT EXISTS translation (
+        country VARCHAR(15),
+        uniqueid VARCHAR(50),
+        description_en VARCHAR(5000),
+        PRIMARY KEY(country, uniqueid));
+        """
+    return(tables)
+    
+def get_tanqeebcv_table_schema():
+    
+    tables = {}
+    tables['resumelinks'] = """CREATE TABLE IF NOT EXISTS resumelinks (
+        id INTEGER,
+        srchtitle VARCHAR(50),
+        srchcountry VARCHAR(15),
+        name VARCHAR(50),
+        jobtitle VARCHAR(50),
+        jobstatid INTEGER,
+        country VARCHAR(20),
+        region VARCHAR(20),
+        PRIMARY KEY(id, srchtitle, country),
+        FOREIGN KEY(jobstatid) REFERENCES jobstatmap(id)
+        );
+        """
+    
+    tables['jobstatmap'] = """CREATE TABLE IF NOT EXISTS jobstatmap (
+        id INTEGER,
+        jobstat VARCHAR(50),
+        PRIMARY KEY(id)
+        );
+    """
     return(tables)
         
 if __name__ == "__main__":

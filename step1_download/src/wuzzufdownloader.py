@@ -84,7 +84,7 @@ class WuzzufDownloader(BaseDownloader):
 
     def get_job_page(self, uid, urlname, postdate):
         """Scrapes individual job advertisement pages and return the row of relevant data."""
-        print(urlname)
+        #print(urlname)
         punctuation = [";",",","'","&"]
         data = {}
         cols = ['country','uid', 'postdate', 'posttime', 'downloaddate', 'downloadtime', 'stat',    'job-title',
@@ -103,7 +103,10 @@ class WuzzufDownloader(BaseDownloader):
         
         #STEP 1:  request the url page
         response = self._request_until_succeed(urlname)
-    
+        if response is None:
+            urlname = urlname.split('-')[0]
+            response = self._request_until_succeed(urlname)
+        
         # No data retrieve return empty data
         if response is None:
             data['stat'] = 'NOT FOUND'
@@ -121,7 +124,7 @@ class WuzzufDownloader(BaseDownloader):
         #STEP 2:  parse main job data
 
         jobdata = mainjobdata.find_all(['h1','a','span'], {'class':True})
-        print(jobdata)
+        #print(jobdata)
         for d in jobdata:
             if d['class'][0] in ['job-title','job-company-name','job-company-location']:
                 data[d['class'][0]] = d.get_text().strip().encode('utf-8')
@@ -134,7 +137,7 @@ class WuzzufDownloader(BaseDownloader):
         data['num_vacancies'] = int(temp.get_text()) if temp is not None else 1
         
         temp = mainjobdata.find_all('div', attrs={'class': 'applicants-stat-num'})
-        print(temp)
+        #print(temp)
         data['num_seen'] = int(temp[0].get_text()) if temp is not None and len(temp) > 0 else 0
         data['num_shortlisted'] = int(temp[1].get_text()) if temp is not None and len(temp) > 1 else 0
         data['num_rejected'] = int(temp[2].get_text()) if temp is not None and len(temp) > 2 else 0
@@ -168,14 +171,16 @@ class WuzzufDownloader(BaseDownloader):
                     data['salary']='>'.join(data['salary'])
                 else:
                     data[name] = temp[1].strip()
-            print(data)
+            #print(data)
         
         # Job roles
         jobcard = soup.find('div', attrs={'class': "about-job content-card"})
         temp = jobcard.find_all('div', attrs={'class': "labels-wrapper"})
-        for d in temp:
-            jobroles = [role.get_text().strip() for role in d.find_all(['a'])]
-        data['roles'] = '>'.join(jobroles)
+        if temp is not None:
+            jobroles = []
+            for d in temp:
+                jobroles += [role.get_text().strip() for role in d.find_all(['a'])]
+            data['roles'] = '>'.join(jobroles)
         
         #obtain job requirements, key words, and industry indicators
         jobreqs = soup.find('div', attrs={'class': "job-requirements content-card"})
@@ -248,9 +253,10 @@ class WuzzufDownloader(BaseDownloader):
         
     def run_all(self, debug=False):
         """Run key operations to update database."""
-        
+        print("Running WuzzufDownloader for %s on date (%s)" % (self.country, self.datecur))
+        print("="*100)
         starttime = time.time()
-        lastdownloaddate = self._last_download_date('jobadpageurls')
+        lastdownloaddate = self._last_download_date('jobadpageurls','postdate')
         self.get_job_urls(lastdownloaddate, debug=debug)
         print("Time to get new urls: {}".format(time.time()-starttime))
         self.get_new_page_data(debug=debug)

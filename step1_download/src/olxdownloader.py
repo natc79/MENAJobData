@@ -32,11 +32,11 @@ class OLXDownloader(BaseDownloader):
         self.country = params["country"]
         self.tz = timezone(params["timezone"])
         self.url = params["url"]
-        self.datecur = datetime.datetime.now(self.tz)
+        self.datecur = datetime.datetime.now(self.tz).date()
         self._create_table_schema(get_olx_table_schema())
         print("Start Time: {}".format(self.datecur))
         
-    def get_region_data(self):
+    def get_region_data(self, debug=False):
         """Gets aggregated counts of advertisements by different regions in given country."""
         
         datetimecur = datetime.datetime.now(self.tz)
@@ -61,6 +61,8 @@ class OLXDownloader(BaseDownloader):
         data = []
     
         for i, subreg in enumerate(subregions):
+            if debug and i > 2:
+                break
             #print(regions[i].get_text().strip())
             region = regions[i].get_text().strip()
             temp = region.split(' (')
@@ -80,23 +82,24 @@ class OLXDownloader(BaseDownloader):
                 fsubregname = re.sub('''[\s(\+\s)?|\'|\.\s]''','-',subregname.lower())
                 fsubregname = re.sub('[-](-)?(-)?','-',fsubregname)
                 row = [downloaddate, downloadtime, self.country, regionname[i], fregname[i], subregname, fsubregname,totalposts[i], subposts]
-                query = '''INSERT OR IGNORE INTO regionadcounts (downloaddate, downloadtime, country, region, freg, subregion, fsubreg, totalregposts, subposts) VALUES (?,?,?,?,?,?,?,?,?);'''
+                query = '''INSERT OR IGNORE INTO regionadcounts (downloaddate, downloadtime, country, region, freg, subregion, fsubreg, totalregposts, subposts) VALUES (?,?,?,?,?,?,?,?,?) ;'''
                 self.cursor.execute(query, row)
     
         #commit entries to the database
         self.conn.commit()
         
-    def get_region_jobdata(self, rowstart=0):
+    def get_region_jobdata(self, debug=True):
         """Loop through the key industries and regions to investigate the counts of postings
         under each heading"""  
     
         # SELECT ONLY MOST RECENT DOWNLOAD DATE OF DATA
-        query = '''SELECT DISTINCT country, region, freg, subregion, fsubreg FROM regionadcounts WHERE DATE(downloaddate) >= DATE('{}', '-2 days');'''
-        data = pd.read_sql(query.format(self.datecur.strftime('%Y-%m-%d')),self.conn)
+        query = '''SELECT DISTINCT country, region, freg, subregion, fsubreg FROM regionadcounts WHERE country='{}' AND DATE(downloaddate) >= DATE('{}', '-2 days');'''
+        data = pd.read_sql(query.format(self.country, self.datecur.strftime('%Y-%m-%d')),self.conn)
     
-        #loop through 365 qism areas to get job data
-        for i, reg in data[rowstart:].iterrows():
-        
+        #loop through the different geographic regions to get job data
+        for i, reg in data.iterrows():
+            if debug and i > 2:
+                break
             datetimecur = datetime.datetime.now(self.tz)
             downloaddate = datetimecur.strftime('%Y-%m-%d')
             downloadtime = datetimecur.strftime('%H:%M')
@@ -114,7 +117,7 @@ class OLXDownloader(BaseDownloader):
                 query = '''INSERT OR IGNORE INTO regionjobadcounts (downloaddate, downloadtime, country, region, freg, subregion, fsubreg, sector, urlregsector, totalposts) VALUES (?,?,?,?,?,?,?,?,?,?);'''
                 self.cursor.execute(query,rowvalues)
          
-                if i % 20 == 0:
+                if i % 100 == 0:
                     print(i,rowvalues)
             # sleep to make sure not too many requests are being made
             time.sleep(random.randint(1,3))
@@ -257,13 +260,12 @@ class OLXDownloader(BaseDownloader):
             time.sleep(random.randint(1,5))
         self.conn.commit()
         
-
     def get_jobpage(self, uid, postdate, url, translation=False):
         """Get the data from each job page and insert into database"""
     
         data = {}
         cols = ['downloaddate', 'downloadtime', 'country', 'uid', 'postdate', 'posttime', 'pageviews', 'title',
-            'Experience Level', 'Education Level', 'Type', 'Employment Type', 'compensation', 'content', 'texttype',
+            'Experience Level', 'Education Level', 'Type', 'Employment Type', 'Compensation', 'content', 'texttype',
             'userhref', 'username', 'userjoinmonth', 'userjoinyear', 'emailavail', 'phoneavail', 'stat']
         
         fields = ['Experience Level','Employment Type','Education Level','Type','Compensation']
@@ -339,15 +341,17 @@ class OLXDownloader(BaseDownloader):
         if comp is not None:
             data['Compensation'] = comp.get_text().strip()
         if 'Compensation' in data:
-            data['Compensation'] = data['Compensation'].replace(',','').strip(' EGP')
-            data['Compensation'] = int(data['Compensation'])
-    
+            data['Compensation'] = re.sub(r'(\d+.*?\d+)(.*?)', lambda m: m.group(1), data['Compensation'])
+            data['Compensation'] = re.sub(r'[^0-9]','', data['Compensation'])
+            try:
+                data['Compensation'] = int(data['Compensation'])
+            except:
+                data['Compensation'] = ''
+                
         #get content related to identity of user/poster of ad
         user = soup.find('div', attrs={'class':'user-box'})
         if user is not None:
             userhref = user.find('a')['href']
-            #print(userhref)
-            #print(userhref.split('/user/')[1].strip('/'))
             data['username']=user.find('p', attrs={'class':'user-box__info__name'}).get_text().strip().encode('utf-8')
             data['userjoindate']=user.find('p', attrs={'class':'user-box__info__age'}).get_text().strip()
             m=re.search(r'On site since\s+(\w+)\s+(\d+)',data['userjoindate'])
@@ -363,31 +367,37 @@ class OLXDownloader(BaseDownloader):
         data['phoneavail'] = 1 if phoneinfo is not None and 'Show phone' in phoneinfo.get_text().strip() else 0
 
         row = [data[col] if col in data else np.nan for col in cols]
-        print(row)
         #OLX field for compensation just got changed (17-Dec-2017)
         return(row)
     
-    def check_changes_region(self, datast=0):
+    def check_changes_region(self, datast=0, debug=True):
         """Select only region sectors where total posts have changed at least once over the last 5 days"""
         
         c = self.cursor
-        query = """SELECT DISTINCT a.country, a.region, a.freg, a.subregion, a.fsubreg, a.sector, a.urlregsector FROM regionjobadcounts a INNER JOIN regionjobadcounts b ON a.region = b.region AND a.subregion = b.subregion AND a.sector = b.sector WHERE (a.country = '%s' AND DATE(a.downloaddate,'+5 DAYS') >= (SELECT DISTINCT MAX(DATE(downloaddate)) FROM regionjobadcounts) AND (a.totalposts != b.totalposts) AND DATE(a.downloaddate,'-2 DAYS') == DATE(b.downloaddate)) OR 
-        (a.fsubreg NOT IN (SELECT DISTINCT fsubreg FROM jobadpagedata
-            WHERE a.country = country AND a.region = region AND a.freg = freg AND a.subregion = subregion AND a.fsubreg = fsubreg AND a.downloaddate = downloaddate))
-        ;""" % (self.country)
+        query = """SELECT DISTINCT a.country, a.region, a.freg, a.subregion, a.fsubreg, 
+                    a.sector, a.urlregsector 
+                FROM regionjobadcounts a 
+                INNER JOIN regionjobadcounts b 
+                    ON a.region = b.region AND a.subregion = b.subregion AND a.sector = b.sector 
+                WHERE a.country = '%s' 
+                    AND ((DATE(a.downloaddate,'+5 DAYS') >= (SELECT DISTINCT MAX(DATE(downloaddate)) FROM regionjobadcounts) 
+                    AND (a.totalposts != b.totalposts) AND DATE(a.downloaddate,'-2 DAYS') == DATE(b.downloaddate)) OR 
+                (a.fsubreg NOT IN (SELECT DISTINCT fsubreg FROM jobadpagedata
+                WHERE a.country = country AND country = '%s' AND a.region = region AND a.freg = freg AND a.subregion = subregion AND a.fsubreg = fsubreg AND a.downloaddate = downloaddate)))
+                ;""" % (self.country, self.country)
         regsector = c.execute(query).fetchall()
-        print(regsector)
         print("Region-sectors to grab: {}".format(len(regsector)))
         cols = ['country','region','freg','subregion','fsubreg','sector','urlregsector']
         for i, reg in enumerate(regsector[datast:]):
+            if debug and i > 2:
+                break
             d = {col: reg[n] for n, col in enumerate(cols)}
-            query = '''SELECT uid FROM jobadpageurls WHERE fsubreg = '{}' AND jobsector = '{}';'''
-            ids = c.execute(query.format(d['fsubreg'],d['sector'])).fetchall()
-            query = '''SELECT MAX(DATE(downloaddate)) FROM jobadpagedata WHERE uid IN (SELECT uid FROM jobadpageurls WHERE fsubreg = '{}' AND jobsector = '{}');'''
-            lastdate = c.execute(query.format(d['fsubreg'],d['sector'])).fetchall()[0][0]
-            print("Last Download Date for sub-region {} and sector {}: {}".format(d['fsubreg'],d['sector'],lastdate))
-            query = '''SELECT COUNT(*) FROM jobadpageurls WHERE fsubreg == '{}' AND jobsector == '{}';'''
-            oldnumentries = c.execute(query.format(d['fsubreg'],d['sector'])).fetchall()[0][0]
+            query = '''SELECT uid FROM jobadpageurls WHERE country='{}' AND fsubreg = '{}' AND jobsector = '{}';'''
+            ids = c.execute(query.format(self.country, d['fsubreg'],d['sector'])).fetchall()
+            query = '''SELECT MAX(DATE(downloaddate)) FROM jobadpagedata WHERE country='{}' AND uid IN (SELECT uid FROM jobadpageurls WHERE country='{}' AND fsubreg = '{}' AND jobsector = '{}');'''
+            lastdate = c.execute(query.format(self.country, self.country, d['fsubreg'],d['sector'])).fetchall()[0][0]
+            query = '''SELECT COUNT(*) FROM jobadpageurls WHERE country='{}' AND fsubreg == '{}' AND jobsector == '{}';'''
+            oldnumentries = c.execute(query.format(self.country, d['fsubreg'],d['sector'])).fetchall()[0][0]
             #print("Old numentries: {}".format(oldnumentries))
             if lastdate is None:
                 #if no data is in the database lets insert from X days ago
@@ -399,12 +409,14 @@ class OLXDownloader(BaseDownloader):
                 dateval = datetime.date(int(temp[0]),int(temp[1]),int(temp[2]))
             #if there is data in the database lets only insert data posted after the last date downloaded
             self.get_jobpage_urls(d['region'],d['freg'],d['subregion'],d['fsubreg'],d['sector'],d['urlregsector'],dateval)
-            query = '''SELECT COUNT(*) FROM jobadpageurls WHERE fsubreg == '{}' AND jobsector == '{}';'''
-            newnumentries = c.execute(query.format(d['fsubreg'],d['sector'])).fetchall()[0][0]
-            print("Number new pages to entered into jobadpageurls for subregion {} and sector {}: {}".format(d['fsubreg'],d['sector'],newnumentries-oldnumentries))
+            query = '''SELECT COUNT(*) FROM jobadpageurls WHERE country='{}' AND fsubreg == '{}' AND jobsector == '{}';'''
+            newnumentries = c.execute(query.format(self.country, d['fsubreg'],d['sector'])).fetchall()[0][0]
+            if i % 1000 == 0:
+                print("Last Download Date for sub-region {} and sector {}: {}".format(d['fsubreg'],d['sector'],lastdate))
+                print("Number new pages entered into jobadpageurls for subregion {} and sector {}: {}".format(d['fsubreg'],d['sector'],newnumentries-oldnumentries))
         self.conn.commit()
   
-    def get_new_page_data(self):
+    def get_new_page_data(self, debug=False):
         """Only get new data where it is the most recent and status is open.  Ads in
         OLX are live for 3 months so if we rotate through for at least 15 weeks this should cover
         everything.
@@ -413,12 +425,21 @@ class OLXDownloader(BaseDownloader):
         jobpageurllist = []
         for i in range(0,15):
             d = i*7
-            temp = self.cursor.execute('''SELECT uid, postdate, urllinkshort FROM jobadpageurls WHERE country = '{}' AND DATE(postdate) = DATE('{}','-{} days') and uid NOT IN (SELECT DISTINCT uid FROM jobadpagedata WHERE stat == 'CLOSED' OR DATE(postdate) <= DATE('{}','-93 days'));'''.format(self.country, self.datecur.strftime('%Y-%m-%d'),d,self.datecur)).fetchall()
+            query = '''SELECT DISTINCT uid, postdate, urllinkshort, country
+                        FROM jobadpageurls 
+                        WHERE country = '%s' AND DATE(postdate) = DATE('%s','-%d days') 
+                        AND uid NOT IN 
+                        (SELECT DISTINCT uid 
+                        FROM jobadpagedata WHERE country='%s' 
+                        AND (stat = 'CLOSED' OR DATE(postdate) <= DATE('%s','-93 days')));''' % (self.country, self.datecur.strftime('%Y-%m-%d'), d, self.country, self.datecur)
+            temp = self.cursor.execute(query).fetchall()
             jobpageurllist = jobpageurllist + temp
-            
         print("Number of pages to query: {}".format(len(jobpageurllist)))
-
-        for urlinfo in jobpageurllist:
+        #print(jobpageurllist[0:10])
+        
+        for i, urlinfo in enumerate(jobpageurllist):
+            if debug and i > 2:
+                break
             print(urlinfo)
             query = '''INSERT OR IGNORE INTO jobadpagedata (downloaddate, downloadtime, country, uid, postdate, posttime, pageviews, title, experiencelevel, educationlevel, type, employtype, compensation, description, textlanguage, userhref, username, userjoinmt, userjoinyear, emailavail, phoneavail, stat)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);'''
@@ -427,16 +448,21 @@ class OLXDownloader(BaseDownloader):
             self.cursor.execute(query, rowvalues)
             self.conn.commit() 
 
-    def run_all(self):
+    def run_all(self, debug=False):
         """Run key operations to update database."""
-    
+        print("Running OLXDownloader for %s on date (%s)" % (self.country, self.datecur))
+        print("="*100)
         starttime = time.time()
         #write one entry per day to the OLXregiondata job database
-        self.get_region_data()
-        self.get_region_jobdata(rowstart=0)
-        print("Run time for get_region_jobdata: {}".format(time.time()-starttime))
-        regsector = self.check_changes_region()
-        self.get_new_page_data()
+        lastdownloaddate = self._last_download_date('regionadcounts','downloaddate')
+        if lastdownloaddate < self.datecur:
+            self.get_region_data(debug=debug)
+        lastdownloaddate = self._last_download_date('regionjobadcounts','downloaddate')
+        if lastdownloaddate < self.datecur:
+            self.get_region_jobdata(debug=debug)
+            print("Run time for get_region_jobdata: {}".format(time.time()-starttime))
+        regsector = self.check_changes_region(debug=debug)
+        self.get_new_page_data(debug=debug)
         print("Run time for get_new_page_data: {}".format(time.time()-starttime))
         self._display_db_tables()
         self._archive_database('jobadpagedata', 'jobadpageurls',maxdays=90)

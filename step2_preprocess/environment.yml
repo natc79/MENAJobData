@@ -1,0 +1,11 @@
+dependencies:
+- python=3.6.5
+- numpy
+- pandas
+- sqlite
+- matplotlib
+- google-cloud-translate
+- googletrans
+- html2text
+- jupyter
+
