@@ -18,7 +18,8 @@ import matplotlib.pyplot as plt
 import datetime
 
 class BasePreprocessor(object):
-
+    """Base preprocessor for data scraped from web."""
+    
     def __init__(self, db):
         super(BasePreprocessor, self).__init__()
         self.conn = sqlite3.connect(db)
@@ -204,8 +205,21 @@ class BasePreprocessor(object):
         text = html.unescape(text)
         return(text)
         
+    def extract_data_to_csv(self):
+        """Extract raw data from sql databases and export to csv"""
+        
+        query = "SELECT * FROM sqlite_master WHERE type='table';"
+        tables = pd.read_sql(query, self.conn)
+ 
+        for i, row in tables.iterrows():
+            # query table data and do a dump into bigquery
+            query = "SELECT * FROM %s;" % row['name']
+            data = pd.read_sql(query, self.conn)
+            data.to_csv(os.path.join(self.extdir, 'csv', '%s.csv' % (row['name'])), index=False)
+            
     def create_graphs():
         raise NotImplementedError
         
     def extract_kws():
-        """"""
+        """Extract keywords that are used for building a dictionary and modeling."""
+        raise NotImplementedError

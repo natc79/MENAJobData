@@ -3,7 +3,8 @@ Purpose:  This class consists of functions to scrape job advertisement data
 from tanqeeb websites.  It is developed to store information in a SQL database.
 
 Author:  Natalie Chun
-Created: 22 November 2018
+Created: November 2018
+Updated: May 2019
 """
 
 from pytz import timezone
@@ -165,6 +166,8 @@ class TanQeebDownloader(BaseDownloader):
             if temp5a is not None:
                 data['date'] = datetime.date(int(temp5a.group(4)),self.datemap.index(temp5a.group(3)),int(temp5a.group(2))).strftime('%Y-%m-%d')
                 pagedate = datetime.datetime.strptime(data['date'], '%Y-%m-%d')
+            else:
+                pagedate = None
             t6 = t2.find('p')
             data['description'] = self._clean_description(t6.text)
             query = """INSERT OR IGNORE INTO jobadpageurls (country, cat, subcat, uniqueid, dataid, 
@@ -176,9 +179,10 @@ class TanQeebDownloader(BaseDownloader):
      
         nextpage = soup.find('link',{'rel':'next'})
         # only scrape next summary page if date is greater than lastdownloaddate
-        if nextpage is not None and pagedate.date() >= self.lastdownloaddate:
-            print("Getting next page", nextpage['href'])
-            self.get_jobad_summary_page(cat, subcat, nextpage['href'], pagetype='next')
+        if nextpage is not None and pagedate is not None:
+            if pagedate.date() >= self.lastdownloaddate:
+                print("Getting next page", nextpage['href'])
+                self.get_jobad_summary_page(cat, subcat, nextpage['href'], pagetype='next')
         
     def get_jobad_page(self, uid, href):
         """Get individual job ad pages."""

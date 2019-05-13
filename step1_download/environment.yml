@@ -4,6 +4,9 @@ dependencies:
 - pandas
 - beautifulsoup4
 - sqlite
+- selenium
+- pymongo
+- jupyter
 - pip
 - pip:
     - googletrans

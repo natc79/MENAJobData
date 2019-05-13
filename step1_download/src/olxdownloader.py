@@ -4,7 +4,8 @@ from OLX websites.  It is developed to store information in a SQL database
 that contains historical data on page views and other information.
 
 Author:  Natalie Chun
-Created: 22 November 2018
+Created: November 2018
+Updated: May 2019
 """
 
 
@@ -129,14 +130,11 @@ class OLXDownloader(BaseDownloader):
     
         sector = {}
         href = {}
-    
-        req = urllib.request.Request(url)
-        try:
-            response = urllib.request.urlopen(req)
-        except:
-            #certain regions have no job postings
-            return([sector,href])
         
+        response = self._request_until_succeed(url)
+        # certain regions have no job postings
+        if response is None:
+            return([sector, href])        
         soup = BeautifulSoup(response, 'html.parser')
 
         #get counts of number of jobs in different areas
@@ -162,8 +160,9 @@ class OLXDownloader(BaseDownloader):
         """
  
         urllist = []
-        req = urllib.request.Request(url)
-        response = urllib.request.urlopen(req)
+        response = self._request_until_succeed(url)
+        if response is None:
+            return(response)
         soup = BeautifulSoup(response, 'html.parser')
     
         #now find out the total number of pages available
@@ -185,9 +184,9 @@ class OLXDownloader(BaseDownloader):
             newurl = url
             if cnt > 1:
                 newurl = url + '?page='+str(cnt)
-            #print(cnt, newurl)
-            req = urllib.request.Request(newurl)
-            response = urllib.request.urlopen(req)
+            response = self._request_until_succeed(url)
+            if response is None:
+                return(None)
             soup = BeautifulSoup(response, 'html.parser')
         
             #get the current time
@@ -470,8 +469,8 @@ class OLXDownloader(BaseDownloader):
  
 if __name__ == "__main__":
     countryparams = [
-        {"country":"jordan", "url":"https://olx.jo/en/", "timezone":"Asia/Amman"},
-        {"country":"egypt", "url":"https://olx.com.eg/en/", "timezone":"Africa/Cairo"}
+        {"country":"egypt", "url":"https://olx.com.eg/en/", "timezone":"Africa/Cairo"},
+        {"country":"jordan", "url":"https://olx.jo/en/", "timezone":"Asia/Amman"}
     ]
     for params in countryparams:
         od = OLXDownloader(params)

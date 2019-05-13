@@ -4,7 +4,7 @@ from Wuzzuf's website.  It is developed to store information in a SQL database
 that contains historical data on number of job applicants, reviews and selections.
 
 Author:  Natalie Chun
-Created: 22 November 2018
+Created: November 2018
 """
 
 from pytz import timezone

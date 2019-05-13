@@ -8,4 +8,5 @@ dependencies:
 - googletrans
 - html2text
 - jupyter
+- pymongo
 
