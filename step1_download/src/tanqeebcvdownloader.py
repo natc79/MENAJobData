@@ -7,6 +7,8 @@ as the login-process is not currently automated.  There are two stages to gather
 2) Get all unique ids and check which are not in the mongoDB for resumes or were last downloaded/active recently
 and should be updated.  Download new resume page.
 Check if the resume page exists in the database, if it does not then
+Start Mongodatabase before running.  In two command prompt windows enter the following:
+mongod, mongo
 
 Author:  Natalie Chun
 Created: 3 March 2019
@@ -28,7 +30,12 @@ from googletrans import Translator
 import html2text
 from basedownloader import BaseDownloader
 from config import FileConfig
-from create_databases import get_tanqeeb_table_schema
+from create_databases import get_tanqeebcv_table_schema
+from pymongo import MongoClient
+from bson.objectid import ObjectId
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+
 
 class TanQeebCVDownloader(BaseDownloader):
     """Class for downloading tanqeeb CVs.  Probably need to use selenium"""
@@ -311,9 +318,115 @@ class TanQeebCVDownloader(BaseDownloader):
         print(len(temp))
         print(temp[0:5])
         for t in temp:
-            if db.resumes.delete_one(t)
+            db.resumes.delete_one(t)
         temp = list(resumes.find({"error":{"$exists": True}},{'_id':1}))
         assert len(temp) == 0, "Error deletion did not work"
+            
+    def translate_text(self, textstr):
+        """Translate text string only if arabic characters in string"""
+        
+        if type(textstr) == bytes:
+            textstr = self.h.handle(textstr.decode('utf-8'))
+        if re.match(r'[\u0627-\u064a]', textstr, re.UNICODE) is not None:
+            try:
+                textstr = self.trans.translate(textstr, dest='en').text
+                time.sleep(random.randint(1,5))
+            except:
+                print("Error: %s" % (textstr))
+                textstr = 'Error'
+        return(textstr)
+            
+    def insert_translation(self, entry):
+        """Insert translation into database."""
+        
+        query = """INSERT OR IGNORE INTO translation (id, downloaddate, column1, column2, listnum, translation_en) VALUES (?,?,?,?,?,?);"""
+        cols = ['id','downloaddate','column1','column2','listnum','translation_en']
+        entryval = [entry[col] if col in entry else np.nan for col in cols]
+        #print(entryval)
+        self.cursor.execute(query,entryval)
+        self.conn.commit()
+            
+    def translate_resume(self):
+        """Translate resume info from arabic to english"""
+        
+        print("Starting to Translate")
+        self.trans = Translator()
+        h = html2text.HTML2Text()
+        h.ignore_links = True
+        self.h = h
+        db = self.db
+        # pull out resumes that have not been translated
+        resumes = self.db['resumes']
+        results = self.db.resumes.find({"error":{"$exists": False}})
+        df = pd.DataFrame(list(results))
+        print(df.head())
+        re1 = re.compile('(\d+)\-(\d+)\-(\d+)')
+        df['Birth Date'] = [row['Birth Date'] if re1.match(str(row['Birth Date'])) is not None else np.nan for i, row in df.iterrows()]
+        df['Birth Date'] = pd.to_datetime(df['Birth Date'], errors='ignore')
+        df['Marital Status'] = [np.nan if row['Marital Status'] == '-' else row['Marital Status'] for i, row in df.iterrows()]
+
+        # create temporary table for checking
+        df[['_id','downloaddate']].to_sql('temporary', self.conn, if_exists='replace')
+        print(len(df))
+
+        query = """SELECT DISTINCT _id, downloaddate FROM temporary t WHERE NOT EXISTS (SELECT * FROM translation WHERE t._id = id AND t.downloaddate = downloaddate) AND NOT EXISTS (SELECT * FROM no_translation WHERE t._id = id AND t.downloaddate = downloaddate);"""
+        ids = pd.read_sql(query, self.conn)
+        print(len(ids))
+        insert = False
+        for i, row in ids.iterrows():
+            obs = self.db.resumes.find_one({"_id": row['_id']})
+            entry = {'id':obs['_id'], 'downloaddate':obs['downloaddate']}
+            if 'education' in obs:
+                insert = True
+                for j, e in enumerate(obs['education']):
+                    if 'degree' in e:
+                        entry.update({'column1':'education', 'column2':'degree', 'listnum':j})
+                        entry['translation_en'] = self.translate_text(e['degree'])
+                        self.insert_translation(entry)
+                    if 'description' in e:
+                        entry.update({'column1':'education', 'column2':'description', 'listnum':j})
+                        entry['translation_en'] = self.translate_text(e['description'])
+                        self.insert_translation(entry)
+            if 'skills' in obs:
+                insert = True
+                for j, l in enumerate(obs['skills']):
+                    entry.update({'column1':'languages', 'column2':'type', 'listnum':j})
+                    entry['translation_en'] = self.translate_text(l)
+                    self.insert_translation(entry)
+            if 'languages' in obs:
+                insert = True
+                for j, l in enumerate(obs['languages']):
+                    entry.update({'column1':'languages', 'column2':'type', 'listnum':j})
+                    entry['translation_en'] = self.translate_text(l['type'])
+                    self.insert_translation(entry)
+            if 'projects' in obs:
+                insert = True
+                for j, p in enumerate(obs['projects']):
+                    if 'description' in p:
+                        entry.update({'column1':'projects', 'column2':'description','listnum':j})   
+                        entry['translation_en'] = self.translate_text(p['description'])
+                        self.insert_translation(entry)
+            if 'experiences' in obs:
+                insert = True
+                for j, e in enumerate(obs['experiences']):
+                    if 'jobtitle' in e:
+                        entry.update({'column1':'experiences', 'column2':'jobtitle','listnum':j})
+                        entry['translation_en'] = self.translate_text(e['jobtitle'])
+                        self.insert_translation(entry)
+                    if 'description' in e:
+                        entry.update({'column1':'experiences', 'column2':'description','listnum':j})
+                        entry['translation_en'] = self.translate_text(e['description'])
+                        self.insert_translation(entry)
+            if 'summary' in obs:
+                insert = True
+                entry.update({'column1':'summary', 'column2':'summary','listnum':0})    
+                entry['translation_en'] = self.translate_text(obs['summary'])
+                self.insert_translation(entry)
+            if insert == False:
+                query1 = """INSERT OR IGNORE INTO no_translation (id, downloaddate) VALUES (?,?);"""
+                self.cursor.execute(query1, [row['_id'],row['downloaddate']])
+            print("Entry %d complete" % (row['_id']))
+        self.cursor.execute("DROP TABLE temporary;")
             
     def get_resume_pages(self):
         """Get resume pages.  Store in mongodb.  TODO: FIXXX"""
@@ -355,6 +468,7 @@ class TanQeebCVDownloader(BaseDownloader):
                     data = {'_id':uid, 'error':e}
                     resumes.insert_one(data)
 
+        
         
 if __name__ == "__main__":
     params = {'chromedriverpath':'C:/Users/natal/Downloads/chromedriver.exe', 'useremail':'suclistejo@memsg.site', 'userpassword':'temporary97'}

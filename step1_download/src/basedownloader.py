@@ -111,14 +111,14 @@ class BaseDownloader(object):
             datenow = self.datecur.strftime("%m%d%Y")
             query = '''SELECT * FROM archived%s;''' % (table)
             df = pd.read_sql(query, self.conn)
-            df.to_csv('archivedpagedata_%s.csv' % (datenow), mode='w', index=False)
+            df.to_csv(os.path.join(self.extdir, 'archivedpagedata_%s.csv' % (datenow)), mode='w', index=False)
             print("Number of archived page entries: {}".format(len(df)))
 
-        #clear information from the archivedpagedata
-        query = '''DELETE FROM archived%s WHERE uid in (SELECT uid FROM archived%s);''' % (table, table)
-        self.cursor.execute(query)
-        self.conn.commit()
-        self.cursor.close()
+            #clear information from the archivedpagedata if output into csv
+            query = '''DELETE FROM archived%s WHERE uid in (SELECT uid FROM archived%s);''' % (table, table)
+            self.cursor.execute(query)
+            self.conn.commit()
+            self.cursor.close()
      
     def _create_table_schema(self, tables):
         """Generate table schema for database.  If it doesn't currently exist"""

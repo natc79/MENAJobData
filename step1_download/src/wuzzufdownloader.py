@@ -26,6 +26,7 @@ class WuzzufDownloader(BaseDownloader):
     
     def __init__(self):
         #super(WuzzufDownloader, self).__init__()
+        self.extdir = os.path.join(FileConfig.EXTDIR,'wuzzuf')
         self.conn = sqlite3.connect(os.path.join(FileConfig.EXTDIR, 'wuzzuf', "wuzzuf_new.db"))
         self.cursor = self.conn.cursor()
         self.country = 'egypt'

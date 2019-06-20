@@ -32,8 +32,9 @@ class TanQeebDownloader(BaseDownloader):
     
     def __init__(self, params):
         #super(TanQeebDownloader, self).__init__()
+        self.extdir = os.path.join(FileConfig.EXTDIR,'tanqeeb')
         self.outdir = os.path.join(FileConfig.EXTDIR,'tanqeeb')
-        self.conn = sqlite3.connect(os.path.join(self.outdir,"tanqeeb.db"), timeout=10)
+        self.conn = sqlite3.connect(os.path.join(self.outdir,"tanqeeb.db"), timeout=3)
         self.cursor = self.conn.cursor()
         self._create_table_schema(get_tanqeeb_table_schema())
         self.country = params["country"]

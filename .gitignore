@@ -1,4 +1,3 @@
-
 *.pyc
 *.html
 *.csv
@@ -6,6 +5,14 @@
 *.pickle
 *.jpg
 *.png
+*.cron
 *.pdf
 *.xlsx
 *.download
+*.ini
+*config.py
+data/
+models/
+figures/
+writeup/
+*-checkpoint.ipynb

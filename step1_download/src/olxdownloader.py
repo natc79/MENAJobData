@@ -28,7 +28,8 @@ class OLXDownloader(BaseDownloader):
     
     def __init__(self, params):
         #super(OLXDownloader, self).__init__(params)
-        self.conn = sqlite3.connect(os.path.join(FileConfig.EXTDIR, 'olx', "OLX.db"))
+        self.extdir = os.path.join(FileConfig.EXTDIR,'olx')
+        self.conn = sqlite3.connect(os.path.join(FileConfig.EXTDIR, 'olx', "OLX.db"), timeout=3)
         self.cursor = self.conn.cursor()
         self.country = params["country"]
         self.tz = timezone(params["timezone"])
@@ -120,6 +121,7 @@ class OLXDownloader(BaseDownloader):
          
                 if i % 100 == 0:
                     print(i,rowvalues)
+                    self.conn.commit()
             # sleep to make sure not too many requests are being made
             time.sleep(random.randint(1,3))
         

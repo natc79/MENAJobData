@@ -252,6 +252,24 @@ def get_tanqeebcv_table_schema():
         PRIMARY KEY(id)
         );
     """
+    
+    tables['translation'] = """CREATE TABLE IF NOT EXISTS translation (
+        id INTEGER,
+        downloaddate VARCHAR(10),
+        column1 VARCHAR(20),
+        column2 VARCHAR(20),
+        listnum INTEGER,
+        translation_en VARCHAR(5000),
+        PRIMARY KEY(id, downloaddate, column1, column2, listnum)
+        );
+    """
+    
+    tables['no_translation'] = """CREATE TABLE IF NOT EXISTS no_translation (
+        id INTEGER,
+        downloaddate VARCHAR(10),
+        PRIMARY KEY(id, downloaddate)
+    );
+    """
     return(tables)
         
 if __name__ == "__main__":
